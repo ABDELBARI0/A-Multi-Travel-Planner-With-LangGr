@@ -175,3 +175,145 @@ def airport_country_matches(airport: dict, country_code: str) -> bool:
 
     return False
 
+
+
+def get_best_airport_for_country(country_code: str):
+    preferred = COUNTRY_MAIN_AIRPORT.get(country_code)
+
+    if preferred and preferred in AIRPORTS:
+        return preferred
+
+    candidates = []
+
+    for iata, airport in AIRPORTS.items():
+        if not iata:
+            continue
+
+        if airport_country_matches(airport, country_code):
+            name = str(airport.get("name", "")).lower()
+            city = str(airport.get("city", "")).lower()
+
+            score = 0
+
+            if "international" in name:
+                score += 50
+            if "intl" in name:
+                score += 40
+            if "capital" in name:
+                score += 20
+            if city:
+                score += 5
+
+            candidates.append((score, iata))
+
+    if not candidates:
+        return None
+
+    candidates.sort(reverse=True)
+    return candidates[0][1]
+
+
+
+
+def resolve_location_to_iata(location: str):
+    """
+    Converts country/city/airport/IATA into IATA code.
+
+    Examples:
+    Bangladesh -> DAC
+    Japan -> NRT
+    Dhaka -> DAC
+    Tokyo -> NRT
+    DAC -> DAC
+    """
+
+    if not location:
+        return None
+
+    raw_location = location.strip()
+
+    # Direct IATA code
+    if re.fullmatch(r"[A-Za-z]{3}", raw_location):
+        code = raw_location.upper()
+        if code in AIRPORTS:
+            return code
+
+    location_clean = clean_text(raw_location)
+
+    if not location_clean:
+        return None
+
+    # City preferred airport
+    if location_clean in CITY_MAIN_AIRPORT:
+        return CITY_MAIN_AIRPORT[location_clean]
+
+    # Country preferred airport
+    country_code = country_name_to_code(location_clean)
+    if country_code:
+        airport = get_best_airport_for_country(country_code)
+        if airport:
+            return airport
+
+    # Exact city match from airport database
+    city_matches = []
+
+    for iata, airport in AIRPORTS.items():
+        city = str(airport.get("city", "")).lower().strip()
+        name = str(airport.get("name", "")).lower().strip()
+
+        score = 0
+
+        if city == location_clean:
+            score += 100
+        elif location_clean in city:
+            score += 70
+
+        if location_clean in name:
+            score += 50
+
+        if "international" in name:
+            score += 10
+
+        if score > 0:
+            city_matches.append((score, iata))
+
+    if city_matches:
+        city_matches.sort(reverse=True)
+        return city_matches[0][1]
+
+    return None
+
+
+
+
+def find_location_mentions(query: str):
+    """
+    Finds country or city names inside a natural language query.
+    """
+
+    q = query.lower()
+    mentions = []
+
+    # Country aliases
+    for alias in COUNTRY_ALIASES:
+        if re.search(rf"\b{re.escape(alias)}\b", q):
+            mentions.append(alias)
+
+    # Country names from pycountry
+    for country in pycountry.countries:
+        name = country.name.lower()
+        if len(name) >= 4 and re.search(rf"\b{re.escape(name)}\b", q):
+            mentions.append(name)
+
+    # City names from our preferred city map
+    for city in CITY_MAIN_AIRPORT:
+        if re.search(rf"\b{re.escape(city)}\b", q):
+            mentions.append(city)
+
+    # Remove duplicate while keeping order
+    unique_mentions = []
+    for item in mentions:
+        if item not in unique_mentions:
+            unique_mentions.append(item)
+
+    return unique_mentions
