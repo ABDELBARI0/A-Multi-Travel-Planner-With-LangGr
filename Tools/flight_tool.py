@@ -317,3 +317,103 @@ def find_location_mentions(query: str):
             unique_mentions.append(item)
 
     return unique_mentions
+
+
+
+def parse_route(query: str):
+    """
+    Returns:
+    dep_iata, arr_iata
+
+    Can return:
+    None, None  -> global live flights
+    DAC, NRT    -> filtered route
+    DAC, None   -> all flights from DAC
+    None, NRT   -> all flights to NRT
+    """
+
+    q = query.strip()
+    q_lower = q.lower()
+
+    # Global / all-country query
+    global_keywords = [
+        "all country",
+        "all countries",
+        "global flight",
+        "global flights",
+        "all flight",
+        "all flights",
+        "worldwide flight",
+        "worldwide flights",
+    ]
+
+    if any(keyword in q_lower for keyword in global_keywords):
+        return None, None
+
+    # Direct IATA code route: DAC to NRT
+    codes = re.findall(r"\b[A-Z]{3}\b", q)
+
+    if len(codes) >= 2:
+        dep = codes[0].upper()
+        arr = codes[1].upper()
+        return dep, arr
+
+    # Pattern: from X to Y
+    match = re.search(
+        r"\bfrom\s+(.+?)\s+\bto\s+(.+?)(?:\s+(?:on|for|under|including|with|in|at)\b|[.!?]|$)",
+        q_lower,
+    )
+
+    if match:
+        origin_text = match.group(1)
+        dest_text = match.group(2)
+
+        dep_iata = resolve_location_to_iata(origin_text)
+        arr_iata = resolve_location_to_iata(dest_text)
+
+        return dep_iata, arr_iata
+
+    # Pattern: to Y from X
+    match = re.search(
+        r"\bto\s+(.+?)\s+\bfrom\s+(.+?)(?:\s+(?:on|for|under|including|with|in|at)\b|[.!?]|$)",
+        q_lower,
+    )
+
+    if match:
+        dest_text = match.group(1)
+        origin_text = match.group(2)
+
+        dep_iata = resolve_location_to_iata(origin_text)
+        arr_iata = resolve_location_to_iata(dest_text)
+
+        return dep_iata, arr_iata
+
+    # Pattern: flights from X
+    match = re.search(r"\bfrom\s+(.+?)(?:[.!?]|$)", q_lower)
+
+    if match:
+        origin_text = match.group(1)
+        dep_iata = resolve_location_to_iata(origin_text)
+        return dep_iata, None
+
+    # Pattern: flights to X
+    match = re.search(r"\bto\s+(.+?)(?:[.!?]|$)", q_lower)
+
+    if match:
+        dest_text = match.group(1)
+        arr_iata = resolve_location_to_iata(dest_text)
+        return None, arr_iata
+
+    # Fallback: find country/city mentions
+    mentions = find_location_mentions(q)
+
+    if len(mentions) >= 2:
+        dep_iata = resolve_location_to_iata(mentions[0])
+        arr_iata = resolve_location_to_iata(mentions[1])
+        return dep_iata, arr_iata
+
+    if len(mentions) == 1:
+        arr_iata = resolve_location_to_iata(mentions[0])
+        return DEFAULT_ORIGIN_IATA, arr_iata
+
+    return None, None
