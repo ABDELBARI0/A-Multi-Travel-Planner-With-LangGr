@@ -10,7 +10,6 @@ os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 from typing import TypedDict, Annotated
 import operator
 import uuid
-import importlib.util
 
 import psycopg
 from psycopg.rows import dict_row
@@ -24,25 +23,8 @@ from langchain_core.messages import (
     SystemMessage,
 )
 from langchain_groq import ChatGroq
-
-
-def _load_local_module(module_name: str, relative_path: str):
-    module_file = os.path.join(os.path.dirname(__file__), relative_path)
-    spec = importlib.util.spec_from_file_location(module_name, module_file)
-
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Unable to load module {module_name} from {module_file}")
-
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-tavily_tool = _load_local_module("tavily_tool", os.path.join("tools", "tavily_tool.py"))
-flight_tool = _load_local_module("flight_tool", os.path.join("tools", "flight_tool.py"))
-
-tavily_search = tavily_tool.tavily_search
-search_flights = flight_tool.search_flights
+from tools.tavily_tool import tavily_search
+from tools.flight_tool import search_flights
 
 
 def get_database_url():
